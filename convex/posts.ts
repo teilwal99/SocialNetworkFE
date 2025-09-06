@@ -1,192 +1,159 @@
-import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
-import { getCurrentUser } from "./users"; // Import the helper function
+import { API_BASE } from "../constants/api_base";
+import { getItem } from "../app/utils/Storage";
 
-export const generateUploadUrl = mutation( async (ctx) => {
-    const identity = await getCurrentUser(ctx);
-    if(!identity){
-        throw new Error("Unauthorized")
-    }
-    return await ctx.storage.generateUploadUrl();
-    
-});
+export const getAccessToken = async () => {
+  const token = await getItem("access_token");
+  if (!token) {
+    throw new Error("No access token found");
+  }
+  return token;
+};
+// Helper: GET with auth token
+export const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const token = await getItem("access_token");
+  console.log("Using token:", token);
+  if (!token) {
+    throw new Error("No access token found");
+  }
 
-export const createPost = mutation({
-    args: {
-        //userId: v.id("users"),
-        //imageUrl: v.string(),
-        storageId: v.id("_storage"),
-        caption: v.optional(v.string()),
-        //likes: v.number(),
-        //comments: v.number(),
+  const res = await fetch(`${url}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     },
-    handler: async (ctx, args) => {
-        const currentUser = await getCurrentUser(ctx);
-        
-        const imageUrl = await ctx.storage.getUrl(args.storageId);
-        if(!imageUrl){
-            throw new Error("Image not found");
-        }
+  });
 
-        const postId = await ctx.db.insert("posts", {
-            userId: currentUser._id,
-            imageUrl,
-            storageId: args.storageId,
-            caption: args.caption,
-            likes: 0,
-            comments: 0,
-        });
-        // increase count posts by 1
+  if (res.status === 403) {
+    console.error("Access denied: 403");
+  }
 
-        await ctx.db.patch(currentUser._id, {posts: currentUser.posts + 1});
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error(`API error ${res.status}: ${errorBody}`);
+  }
 
-        return postId;
+  return res.json();
+};
+
+// Get user from token
+export const getCurrentUserPost = async () => {
+  return fetchWithAuth(`${API_BASE}/users/me`);
+};
+
+// Generate upload URL
+export const generateUploadUrl = async () => {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}/upload-url`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to get upload URL");
+  return res.json(); // { url: string }
+};
+
+// Create post
+export const createPost = async (
+  payload: { media?: string; content?: string; author: string|null } 
+) => {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}/posts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
     },
-});
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to create post");
+  return res.json();
+};
 
-export const getFeedPost = query({
-    handler: async (ctx) => {
-        const currentUser = await getCurrentUser(ctx);
+// Get feed posts
+export const getFeedPost = async () => {
+  return fetchWithAuth(`${API_BASE}/posts`);
+};
 
-        if(!currentUser) throw new Error("User not login");
+// Like or unlike a post
+export const likePost = async (postId: number, userId: number, reactionType: string = "like") => {
+  const token = await getAccessToken();
 
-        const posts = await ctx.db.query("posts").order("desc").collect();
-
-        if(posts.length === 0)return [];
-
-        const postsWithInfo = await Promise.all(
-            posts.map(async(post) => {
-                const postsAuthor =  (await ctx.db.get(post.userId))!;
-
-                const like = await ctx.db.query("likes")
-                    .withIndex("by_user_and_post", 
-                        (q) => q.eq("userId",currentUser._id)
-                            .eq("postId",post._id)
-                ).first();
-                    
-                const bookmark = await ctx.db.query("bookmarks")
-                    .withIndex("by_both", 
-                        (q) => q.eq("userId",currentUser._id)
-                            .eq("postId",post._id)
-                ).first();
-
-                return {
-                    ...post,
-                    author:{
-                        _id:postsAuthor?._id,
-                        username: postsAuthor?.username,
-                        image:postsAuthor?.image
-                    },
-                    isLiked: !!like,
-                    isBookmark: !!bookmark
-                }
-            })
-        )
-
-        return postsWithInfo;
-    }
-});
-
-export const likePost = mutation({
-    args: {
-        postId: v.id("posts"),
+  const res = await fetch(`${API_BASE}/reactions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
     },
-    handler: async (ctx, args) => {
-        const currentUser = await getCurrentUser(ctx);
+    body: JSON.stringify({
+      userId,
+      postId,
+      reactionType,
+    }),
+  });
 
-        const like = await ctx.db.query("likes")
-            .withIndex("by_user_and_post", 
-                (q) => q.eq("userId",currentUser._id)
-                    .eq("postId",args.postId)
-        ).first();
+  if (!res.ok) return null;
+  
+  return res.json(); // returns the saved or updated Reaction object
+};
 
-        const post = await ctx.db.get(args.postId);
-        if(!post){
-            throw new Error("Post not found");  
-        }
 
-        if(like){
-            await ctx.db.delete(like._id);
-            await ctx.db.patch(args.postId, {likes: post.likes - 1});
-            return false;
-        }else{
-            await ctx.db.insert("likes",{
-                userId: currentUser._id,
-                postId: args.postId
-            });
-            await ctx.db.patch(args.postId, {likes: post.likes + 1});
-            
-            if(currentUser._id !== post.userId){
-                // send notification
-                await ctx.db.insert("notifications",{
-                    receiverId: post.userId,
-                    type: "like",
-                    senderId: currentUser._id,
-                    postId: args.postId
-                });
-            }
-            return true;
-        }
-    }
-});
+// Delete post
+export const deletePost = async ( postId: number) => {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}/posts/${postId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to delete post");
+  return res.json();
+};
 
-export const deletePost = mutation({
-    args:{postId: v.id("posts")},
-    handler: async (ctx, args) => {
-        const currentUser = await getCurrentUser(ctx);
+// Get posts by user (optional userId, otherwise gets current user)
+export const getPostsByUser = async ( username?: string) => {
+  const url = username
+    ? `${API_BASE}/posts/user/${username}`
+    : `${API_BASE}/posts/me`;
+  return fetchWithAuth(url);
+};
 
-        const post = await ctx.db.get(args.postId);
+type UploadMediaType = "post" | "avatar" | "comment";
 
-        if(!post)throw new Error("post not found") ;
+export const uploadMedia = async (
+  fileUri: string,
+  type: UploadMediaType,
+  filename?: string
+): Promise<string> => {
+  const token = await getAccessToken();
 
-        if(currentUser._id !== post.userId)throw new Error("Login to delete post");
+  // Fetch the file as a blob
+  const response = await fetch(fileUri);
+  const blob = await response.blob();
 
-        //delete likes
-        const likes = await ctx.db.query("likes").withIndex("by_post",q=>q.eq("postId",args.postId)).collect();
+  // Use provided filename or fallback to timestamp-based one
+  const fileExtension = blob.type.split("/")[1] || "jpg";
+  const finalFilename = filename || `upload_${type}_${Date.now()}.${fileExtension}`;
 
-        for(const like of likes){
-            await ctx.db.delete(like._id);
-        }
-        //delete comments
-        const comments = await ctx.db.query("comments").withIndex("by_post",q=>q.eq("postId",args.postId)).collect();
+  const formData = new FormData();
+  formData.append("file", new File([blob], finalFilename, { type: blob.type }));
 
-        for(const comment of comments){
-            await ctx.db.delete(comment._id);
-        }
-        //delete bookmarks
-        const bookmarks = await ctx.db.query("bookmarks").withIndex("by_post",q=>q.eq("postId",args.postId)).collect();
+  // Use dynamic upload type in the URL
+  const res = await fetch(`${API_BASE}/media/upload/${type}`, {
+    method: "POST",
+    body: formData,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
-        for(const bookmark of bookmarks){
-            await ctx.db.delete(bookmark._id);
-        }
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Media upload failed: ${errorText}`);
+  }
 
-        //delete bookmarks
-        const notifications = await ctx.db.query("notifications").withIndex("by_post",q=>q.eq("postId",args.postId)).collect();
+  return await res.text(); // Or `res.json().url` depending on your backend
+};
 
-        for(const notification of notifications){
-            await ctx.db.delete(notification._id);
-        }
-        
-        //delete image 
-        await ctx.storage.delete(post.storageId);
-        //delete post
-        await ctx.db.delete(args.postId);
-        //decrease post in user 
-        await ctx.db.patch(currentUser._id,{
-            posts:Math.max(0, (currentUser.posts || 1) - 1),
-        })
-    }
-})
 
-export const getPostByUser = query({
-    args:{userId:v.optional(v.id("users"))},
-    handler: async (ctx,args) => {
-        const user = args.userId? await ctx.db.get(args.userId) : await getCurrentUser(ctx);
-
-        if(!user) throw new Error("User not found.");
-
-        const posts = await ctx.db.query("posts").withIndex("by_user",q => q.eq("userId",user._id)).collect();
-
-        return posts;
-    }
-});
+export const getReaction = async (postId: number) => {
+  return fetchWithAuth(`${API_BASE}/reactions/post/${postId}`);
+}

@@ -40,10 +40,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="bookmark"
+        name="messager"
         options={{
-          title: 'Bookmark',
-          tabBarIcon: ({ color }) => <Ionicons size={28} name="bookmark" color={color} />,
+          title: 'Messagers',
+          tabBarIcon: ({ color }) => <Ionicons size={28} name="chatbox-ellipses-outline" color={color} />,
         }}
       />
       <Tabs.Screen

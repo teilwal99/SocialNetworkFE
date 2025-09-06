@@ -1,48 +1,53 @@
-import { useAuth } from "@clerk/clerk-expo";
-import { Link, Stack } from "expo-router";
+import { useEffect, useState } from "react";
 import {
-  StyleSheet,
   Image,
-  Pressable,
-  TouchableOpacity,
   Text,
   View,
-  ActivityIndicator,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
   FlatList,
+  ActivityIndicator,
+  StyleSheet,
 } from "react-native";
+import { formatDistanceToNow } from "date-fns";
 import styles from "@/styles/feed.styles";
-import { Ionicons } from "@expo/vector-icons";
-import { Id } from "@/convex/_generated/dataModel";
-import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import Loader from "./loader";
-import {formatDistanceToNow} from "date-fns";
-
+import { API_BASE } from "@/constants/api_base";
 
 interface Comment {
-    content:string;
-    _creationTime:number;
-    user:{
-        fullname?: string;
-        image?:string;
-    }
+  content: string;
+  timestamp: string;
+  user: {
+    fullname?: string;
+    image?: string;
+  };
 }
 
-export default function Comment({comment}: {comment: Comment}) {
+export default function Comment({ comment }: { comment: Comment }) {
   return (
     <View style={styles.commentContainer}>
-        <Image source={{uri: comment.user.image}} style={styles.commentAvatar} />
-        <View style={{flex:1, flexDirection:"column"}}>
-            <Text style={styles.commentUsername}>{comment.user.fullname}</Text>
-            <Text style={styles.commentText}>{comment.content}</Text>
-            <Text style={styles.commentTime}>{formatDistanceToNow(comment._creationTime,{addSuffix:true})}</Text>
-
-        </View>
+      <Image source={{ uri: comment.user.image }} style={styles.commentAvatar} />
+      <View style={{ flex: 1, flexDirection: "column" }}>
+        <Text style={styles.commentUsername}>{comment.user.fullname}</Text>
+        <Text style={styles.commentText}>{comment.content}</Text>
+        <Text style={styles.commentTime}>
+          {formatDistanceToNow(comment.timestamp, { addSuffix: true })}
+        </Text>
+      </View>
     </View>
-    
+  );
+}
+
+export function CommentsList({ postId }: { postId: string }) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  if (loading) {
+    return <ActivityIndicator style={{ marginTop: 20 }} />;
+  }
+
+  return (
+    <FlatList
+      data={comments}
+      keyExtractor={(item, index) => `${index}`}
+      renderItem={({ item }) => <Comment comment={item} />}
+    />
   );
 }

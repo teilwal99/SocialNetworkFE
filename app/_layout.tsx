@@ -6,6 +6,7 @@ import { SplashScreen } from 'expo-router';
 import { useCallback, useEffect } from 'react';
 import * as NavigationBar from 'expo-navigation-bar';
 import { Platform } from 'react-native';
+import { AuthProvider } from '@/providers/AuthProvider';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -25,15 +26,17 @@ export default function RootLayout() {
   },[]);
 
   return (
-    
-      <ClerkAndConvexProvider>
+      <AuthProvider>
+        <ClerkAndConvexProvider>
       
-        <SafeAreaProvider>
-          <SafeAreaView style={{ flex: 1, backgroundColor: "black" }} onLayout={onRootLayoutView}>
-            <InitialLayout  />
-          </SafeAreaView>
-        </SafeAreaProvider>
-      </ClerkAndConvexProvider>
+          <SafeAreaProvider>
+            <SafeAreaView style={{ flex: 1, backgroundColor: "black" }} onLayout={onRootLayoutView}>
+              <InitialLayout  />
+            </SafeAreaView>
+          </SafeAreaProvider>
+        </ClerkAndConvexProvider>
+      </AuthProvider>
+      
     
   );
 }

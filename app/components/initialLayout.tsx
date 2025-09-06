@@ -1,8 +1,8 @@
 import { Redirect, Stack, useRouter, useSegments } from 'expo-router';
 import { StyleSheet, Image, Pressable, TouchableOpacity, Text, View } from 'react-native';
-import { useAuth } from "@clerk/clerk-expo";
-import { useEffect } from 'react';
 
+import { useEffect } from 'react';
+import { useAuth } from '@/providers/AuthProvider';
 
 export default function InitialLayout() {
     const { isSignedIn, isLoaded } = useAuth();

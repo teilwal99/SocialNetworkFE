@@ -1,156 +1,309 @@
-import {  Pressable, Text, TouchableOpacity, View } from "react-native";
+import {  Dimensions, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { Image, } from "expo-image";
 import styles  from "@/styles/feed.styles";
-import { Link } from "expo-router";
+import { Link, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState, useEffect } from "react";
 import * as FileSystem from "expo-file-system";
-import { Id } from "@/convex/_generated/dataModel";
-import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import CommentsModal from "./commentsModal";
 import { bookmarkPost } from "@/convex/bookmarks";
-import { getCurrentUser, getUserByClerkId } from "@/convex/users";
-import { useUser } from "@clerk/clerk-expo";
-import { deletePost } from "@/convex/posts";
+import { likePost, deletePost, getReaction } from "@/convex/posts";
+import { User } from "../type/user";
+import { useAuth } from "@/providers/AuthProvider";
 
-type ProsPosts = {
+type PostProps = {
   post: {
-    _id: Id<"posts">;
+    id: number;
     imageUrl: string;
     caption?: string;
     likes: number;
     comments: number;
-    _creationTime: number; 
+    creationTime: number;
     isLiked: boolean;
-    isBookmark: boolean; 
+    isBookmark: boolean;
     author: {
-      _id: string; 
+      _id: number;
+      username?: string;
       image: string;
-      username?: string; 
     };
   };
 };
 
+type ReactionType = "like" | "love" | "haha";
 
-export default function Post ({post}: ProsPosts) {
-  console.log("post",post);
-  const [isLike,setIsLiked] = useState(post.isLiked);
- 
-  const [likesCount,setLikesCount] = useState(post.likes);
-  const [commentsCount,setCommentsCount] = useState(post.comments);
-  const [showComments,setShowComments] = useState(false);
+const reactionIconMap: Record<ReactionType, { icon: string; filledIcon: string }> = {
+  like: { icon: "thumbs-up-outline", filledIcon: "thumbs-up" },
+  love: { icon: "heart-outline", filledIcon: "heart" },
+  haha: { icon: "happy-outline", filledIcon: "happy" },
+};
+
+const { width } = Dimensions.get("window");
+const reactionTypes = ["like", "love", "haha"] as const;
+
+export default function Post({ post }: PostProps) {
+  const [userReaction, setUserReaction] = useState<"like" | "love" | "haha" | null>(null);
+  const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({
+    like: 0,
+    love: 0,
+    haha: 0,
+  });
+  const [commentsCount, setCommentsCount] = useState(post.comments);
+  const [showComments, setShowComments] = useState(false);
   const [isBookmark, setIsBookmark] = useState(post.isBookmark);
+  const [imageHeight, setImageHeight] = useState<number | null>(null);
+  const [likesCount, setLikesCount] = useState<number>(0);
+  const { user, logout } = useAuth();
 
-  const likePost = useMutation(api.posts.likePost);
-  const bookmarkPost = useMutation(api.bookmarks.bookmarkPost);
-  const {user} = useUser();
+  if(!user){logout();}
 
-  const currentUser = useQuery(api.users.getUserByClerkId,user?{clerkId:user?.id}: "skip")
-  
-  const handleLike = async () => {
-    try {
-      const newLike = await likePost({postId:post._id});
-      setIsLiked(newLike);
-      setLikesCount(newLike?likesCount+1:likesCount-1);
-    } catch (error) {
-      console.log("Error in liking post", error);
+  const fetchReaction = async (user: any) => {
+    const postReactions = await getReaction(post.id);
+
+    // find user's reaction
+    const userReacted = postReactions.reactions.find(
+      (reaction: any) => reaction.user.fullname === user.fullname
+    );
+    setUserReaction(userReacted?.reactionType ?? null);
+
+    if (postReactions?.counts) {
+      setReactionCounts({
+        like: postReactions.counts.like ?? 0,
+        love: postReactions.counts.love ?? 0,
+        haha: postReactions.counts.haha ?? 0,
+      });
+
+      const total =
+        (postReactions.counts.like ?? 0) +
+        (postReactions.counts.love ?? 0) +
+        (postReactions.counts.haha ?? 0);
+
+      setLikesCount(total);
     }
   };
 
-  const handlebookmark = async () => {
-    try {
-      const newIsBookmark = await bookmarkPost({postId:post._id});
-      setIsBookmark(newIsBookmark);
+
+  useEffect(() => {
+    (async () => {
       
-    } catch (error) {
-      console.log("Error in bookmarking post", error);
+      await fetchReaction(user);
+    })();
+  }, []);
+
+  const handleReaction = async (type: "like" | "love" | "haha") => {
+    try {
+      if (!user) return;
+
+      const updated = await likePost(post.id, user.id, type);
+      console.log(updated);
+      // Case: reaction was removed (same type clicked again)
+      if (updated.status) {
+        setUserReaction(null);
+        await fetchReaction(user);
+        return; // stop further updates
+      }
+
+      // Case: new or changed reaction
+      setUserReaction(type);
+
+      setReactionCounts((prev) => {
+        const newCounts = { ...prev };
+
+        // remove previous reaction if exists
+        if (userReaction && newCounts[userReaction] > 0) {
+          newCounts[userReaction]--;
+        }
+
+        // add new one
+        newCounts[type] = (newCounts[type] || 0) + 1;
+        return newCounts;
+      });
+
+      // update total likes
+      setLikesCount((prev) => prev + 1); // optional if not using fetchReaction
+    } catch (err) {
+      console.error("Reaction error:", err);
     }
   };
-  const deletePost = useMutation(api.posts.deletePost);
+
+
+
+  /* const handleBookmark = async () => {
+    try {
+      const updated = await bookmarkPost(post.id);
+      setIsBookmark(updated);
+    } catch (err) {
+      console.error("Bookmark error:", err);
+    }
+  }; */
+
   const handleDelete = async () => {
     try {
-      await deletePost({postId:post._id});
-      
-    } catch (error) {
-      console.log("Error in deleting post", error);
+      await deletePost( post.id);
+      // Optionally: trigger refresh or notify deletion
+    } catch (err) {
+      console.error("Delete error:", err);
     }
   };
+  
+  const handleImagePost = async (uri: string) => {
 
+    // Create an invisible Image object to get dimensions
+    const img = new global.Image();
+    img.src = uri;
+    img.onload = () => {
+      const scaleFactor = (width - 16) / img.width;
+      const height = img.height * scaleFactor;
+      setImageHeight(height);
+    };
+  }
+  const tempImgUrl = "http://localhost:8081" + post.imageUrl;
+  useEffect(() => {
+    if (tempImgUrl) {
+      handleImagePost(tempImgUrl);
+    }
+  }, [tempImgUrl]);
+  if (post.author.image) {
+    var tempAvatarUrl = "http://localhost:8081" + post.author.image;
+  }
+  else {
+    var tempAvatarUrl = "http://localhost:8081/media/avatar/default-avatar.png";
+  }
   return (
-  <View style={styles.post}> 
-    <View style={styles.postHeader}>
-      <Link href={currentUser?._id === post.author._id ? "/(tabs)/profile" : `/user/${post.author._id}`} asChild >
-        <TouchableOpacity style={styles.postHeaderLeft}>
-          <Image 
-            source={{ uri: post.author?.image }} 
-            style={styles.postAvatar} 
-            contentFit="cover" 
-            transition={200} 
-            cachePolicy="memory-disk"
-          />
-          <Text style={styles.postUsername}>{post.author?.username}</Text>
-        </TouchableOpacity>
-      </Link>
-      
-      {post.author._id !== currentUser?._id ?(
-      <TouchableOpacity>
-        <Ionicons name="ellipsis-horizontal" size={20} color="white" />
-      </TouchableOpacity>): 
-      (<TouchableOpacity onPress={handleDelete}>
-        <Ionicons name="trash-outline" size={20} color="white"  />
-      </TouchableOpacity>)}
-      
-    </View>
-    
-    <Image 
-      key={post._id} 
-      source={{ uri: post.imageUrl }} 
-      style={styles.postImage} 
-      contentFit="cover"
-      transition={200}
-      cachePolicy="memory-disk"
-    />
+    <View style={styles.post}>
+      {/* Header */}
+      <View style={styles.postHeader}>
+        <Link
+          href={
+            user?.id === post.author._id
+              ? "/(tabs)/profile"
+              : `/user/${post.author._id}`
+          }
+          asChild
+        >
+          <TouchableOpacity style={styles.postHeaderLeft}>
+            <Image
+              source={{ uri: tempAvatarUrl }}
+              style={styles.postAvatar}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="memory-disk"
+            />
+            <Text style={styles.postUsername}>{post.author?.username}</Text>
+          </TouchableOpacity>
+        </Link>
 
-    {/*Posts action*/}
-    <View style={styles.postActions}> 
-      <View style={styles.postActionsLeft}>
-        <TouchableOpacity onPress={handleLike}>
-          <Ionicons name={isLike ?"heart":"heart-outline"} size={24} color={isLike?"green":"white"}  />
-        </TouchableOpacity> 
-        <TouchableOpacity onPress={()=>setShowComments(true)}>
-          <Ionicons name="chatbubble-outline" size={22} color="white"  />
-        </TouchableOpacity> 
-        <TouchableOpacity  onPress={handlebookmark}>
-          <Ionicons name={isBookmark?"bookmark":"bookmark-outline"} size={24} color={isBookmark?"green":"white"}   />
-        </TouchableOpacity> 
+        {user?.id === post.author._id ? (
+          <TouchableOpacity onPress={handleDelete}>
+            <Ionicons name="trash-outline" size={20} color="white" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity>
+            <Ionicons name="ellipsis-horizontal" size={20} color="white" />
+          </TouchableOpacity>
+        )}
       </View>
-      
-    </View>   
 
-    {/*Posts info*/}
-    <View style={styles.postInfo}> 
-      <Text style={styles.likesText}>
-        {likesCount>0?`${likesCount.toLocaleString()} likes`:`Be the first to like`}
-      </Text>
-      {post.caption && (
-        <View style={styles.captionContainer}>
-          <Text style={styles.captionUsername}>{post.author.username}</Text>
-          <Text style={styles.captionText}>{post.caption}</Text>
+      {/* Image */}
+      <Image
+        key={post.id}
+        source={{ uri: post.imageUrl ? tempImgUrl: "" }}
+        style={[styles.postImage, { height: imageHeight }]}
+        contentFit="contain"
+        transition={200}
+        cachePolicy="memory-disk"
+      />
+
+      {/* Actions */}
+      <View style={styles.postActions}>
+        <View style={styles.postActionsLeft}>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {reactionTypes.map((type) => {
+              const isActive = userReaction === type;
+              const iconName = isActive
+                ? reactionIconMap[type].filledIcon
+                : reactionIconMap[type].icon;
+              const iconColor = isActive ? "#00BFFF" : "white"; // or any highlight color
+
+              return (
+                <TouchableOpacity
+                  key={type}
+                  onPress={() => handleReaction(type)}
+                  style={{ alignItems: "center" }}
+                >
+                  <Ionicons name={iconName as any} size={22} color={iconColor} />
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: iconColor,
+                      fontWeight: isActive ? "bold" : "normal",
+                      marginTop: 2,
+                    }}
+                  >
+                    {reactionCounts[type]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          
+
+          <TouchableOpacity onPress={() => setShowComments(true)}>
+            <Ionicons name="chatbubble-outline" size={22} color="white" />
+            <Text
+                    style={{
+                      fontSize: 13,
+                      color: "white",
+                      fontWeight: "normal",
+                      marginTop: 2,
+                      textAlign:"center"
+                    }}
+                  >
+                    {commentsCount}
+                  </Text>
+          </TouchableOpacity>
+
+          {/* <TouchableOpacity onPress={handleBookmark}>
+            <Ionicons
+              name={isBookmark ? "bookmark" : "bookmark-outline"}
+              size={24}
+              color={isBookmark ? "green" : "white"}
+            />
+          </TouchableOpacity> */}
         </View>
-      )}
+      </View>
 
-        <TouchableOpacity onPress={()=>setShowComments(true)}>
-          <Text style={styles.commentText}>{post.comments?`View ${post.comments} comments`:`Add a comment` }</Text>
-        </TouchableOpacity> 
-        <Text style={styles.timeAgo}> 2 hours ago </Text>
-    </View>  
-    <CommentsModal 
-      postId={post._id}
-      visible={showComments}
-      onClose={() => setShowComments(false)}
-      onCommentAdded={() => setCommentsCount((prev) => prev+1)}
-    />
-    
-  </View>);
+      {/* Info */}
+      <View style={styles.postInfo}>
+        <Text style={styles.likesText}>
+          {likesCount > 0 ?"": `Be the first to like`}
+        </Text>
+
+        {post.caption && (
+          <View style={styles.captionContainer}>
+            <Text style={styles.captionUsername}>{post.author.username}</Text>
+            <Text style={styles.captionText}>{post.caption}</Text>
+          </View>
+        )}
+
+        <TouchableOpacity onPress={() => setShowComments(true)}>
+          <Text style={styles.commentText}>
+            {commentsCount
+              ? `View ${commentsCount} comments`
+              : "Add a comment"}
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={styles.timeAgo}>2 hours ago</Text>
+      </View>
+
+      {/* Comments */}
+      <CommentsModal
+        postId={post.id}
+        visible={showComments}
+        onClose={() => setShowComments(false)}
+        onCommentAdded={() => setCommentsCount((prev) => prev + 1)}
+      />
+    </View>
+  );
 }

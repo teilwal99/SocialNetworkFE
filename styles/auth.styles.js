@@ -9,7 +9,19 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor:Colors.background
+    backgroundColor:"transparent",
+  },
+  bgContainer: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.4)", // Optional: dark overlay for contrast
   },
   header: {
     flexDirection: "row",
@@ -89,26 +101,51 @@ const styles = StyleSheet.create({
   appName: {
     fontSize:42,
     textTransform:"uppercase",
+    color:Colors.primary,
+    fontFamily:"JetBrainMono-Bold",
   },
   tagLine: {
     fontSize:22,
     textAlign:"center",
-    marginTop:10
+    marginTop:10,
+    color:Colors.white,
+    fontFamily:"JetBrainMono-Medium",
   },
   loginGoogle: {
-    display:"flex",
-    alignItems:"center",
-    justifyContent: "center",
     flexDirection: "row",
-    flexWrap: "nowrap", 
-    textTransform: "none",
-    
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginTop: 10,
   },
+
   loginText: {
-    fontSize:22,
+    color: Colors.white,
+    fontSize: 18,
+    fontFamily: "JetBrainMono-Medium",
+    marginLeft: 10,
   },
+
   loginLogo: {
-    width:22,
+    width: 22,
+    height: 22,
+  },
+  input: {
+    width: "90%",
+    alignSelf: "center",
+    backgroundColor: Colors.white,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderColor: Colors.gray,
+    borderWidth: 1,
+    marginBottom: 12,
+    fontSize: 16,
+    fontFamily: "JetBrainMono-Regular",
+    color: Colors.textDark, // <- define if needed
   },
 });
 

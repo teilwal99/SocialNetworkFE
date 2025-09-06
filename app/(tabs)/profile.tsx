@@ -1,66 +1,114 @@
-import { FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
+import { FlatList, Keyboard, KeyboardAvoidingView,  Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
 import { Image } from "expo-image";
-import { Link } from "expo-router";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import Loader from "../components/loader";
 import {styles} from "@/styles/profile.styles";
-import { getCurrentUser } from "@/convex/users";
-import { useAuth } from "@clerk/clerk-expo";
-import { useState } from "react";
-import { Doc } from "@/convex/_generated/dataModel";
+import { updateAvatar, updateUser } from "@/convex/users";
+import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { getPostsByUser, uploadMedia } from "@/convex/posts";
+import { User } from "../type/user";
 import * as ImagePicker from "expo-image-picker";
+import { set } from "date-fns";
+import Modal from "react-native-modal";
+import { useAuth } from "@/providers/AuthProvider";
 
-export default function Profile(){
-  const {signOut, userId} = useAuth();
-  const [avatar, setAvatar] = useState<string | null>(null);
-  const updateAvatar = useMutation(api.users.updateAvatar);
+const API_BASE = "http://localhost:8081"; 
 
+export default function Profile() {
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
-  const currentUser = useQuery(api.users.getUserByClerkId,{clerkId:userId || "skip"});
-  //
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [posts, setPosts] = useState<any[]>([]);
   const [editProfile, setEditProfile] = useState({
-    fullname: currentUser?.fullname||"",
-    bio: currentUser?.bio||"",
+    fullname: "",
+    bio: "",
   });
+  const [avatar, setAvatar] = useState<string | null>(null);
 
-  const [selectedPost, setSelectedPost] = useState<Doc<"posts"> | null>(null)
-  const posts = useQuery(api.posts.getPostByUser, {});
+  const [selectedPost, setSelectedPost] = useState<any>(null);
+  const { user,logout } = useAuth();
 
-  const updateProfile = useMutation(api.users.updateProfile)
+  useEffect(() => {
+      (async () => {
+        if(!user)return;
+        try {
+          setCurrentUser(user);
+          setAvatar(user.profilePictureUrl);
+          setEditProfile({  
+            fullname: user.fullname || "",
+            bio: user.bio || "",
+          });
+        } catch (err) {
+          console.error('Failed to fetch user:', err);
+        }
+      })();
+    }, []);
 
-  const handleSaveProfile = async () => {
-    await updateProfile(editProfile);
-    setIsEditModalVisible(false); 
-  };
+  // 📮 Get user posts
+  useEffect(() => {
+    (async () => {
+        try {
+          if (currentUser?.username) {
+            const postsbyuser = await getPostsByUser(currentUser?.username);
+            setPosts(postsbyuser);
+            currentUser.postsCount = postsbyuser.length; 
+          }
+        } catch (err) {
+          console.error('Failed to fetch posts:', err);
+        }
+    })();
+  }, [currentUser?.id]);
+
   
+  // 🖼️ Change avatar
   const changeAvatar = async () => {
-    const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (granted) {
+    try {
+      const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!granted) return;
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: "images",
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
-      if (!result.canceled) {
-        const newAvatarUri = result.assets[0].uri;
-        setAvatar(newAvatarUri);
 
-        // Update avatar in the database
-        try {
-          // Call mutation function here with arguments
-          if(currentUser) await updateAvatar({ userId: currentUser?._id, newAvatar: newAvatarUri });
-          console.log('Avatar updated successfully!');
-        } catch (error) {
-          console.error('Error updating avatar:', error);
-          console.log('Failed to update avatar. Please try again.');
-        }
+      if (result.canceled) return;
+
+      const localUri = result.assets[0].uri;
+
+      // Upload media and get back the file URL
+      const uploadedUrl = await uploadMedia(localUri, "avatar");
+
+      // Update avatar in DB
+      if (currentUser?.id) {
+        await updateAvatar(uploadedUrl, currentUser?.id);
+      }else {
+        console.error("Current user ID is not available");
       }
+      // Reflect avatar change instantly
+      setAvatar(uploadedUrl);
+
+      console.log("Avatar updated!");
+    } catch (error) {
+      console.error("Error updating avatar:", error);
     }
   };
 
+
+  // 💾 Save profile
+  const handleSaveProfile = async () => {
+    if (!currentUser) return;
+    await updateUser(currentUser.id, editProfile);
+    setIsEditModalVisible(false); 
+  };
+
+  if(currentUser?.profilePictureUrl) {
+    var avatarUrl = API_BASE + currentUser.profilePictureUrl;
+  }
+  else {
+    var avatarUrl = `${API_BASE}/media/avatar/default-avatar.png`;
+  }
+  
   if(!currentUser || posts === undefined) return <Loader />
   
   return (
@@ -70,7 +118,7 @@ export default function Profile(){
         <Text style={styles.username}> {currentUser.username} </Text>
       </View>
       <View style={styles.headerRight}>
-        <TouchableOpacity style={styles.headerIcon} onPress={() => signOut}>
+        <TouchableOpacity style={styles.headerIcon} onPress={() => logout}>
           <Ionicons name="log-out-outline" size={24} color={"white"} />
         </TouchableOpacity>
       </View>
@@ -79,7 +127,7 @@ export default function Profile(){
       <View style={styles.profileInfo}>
         <View style={styles.avatarAndStats}>
           <View style={styles.avatarContainer}>
-            <Image source={currentUser.image} style={styles.avatar} contentFit="cover" transition={200}/>
+            <Image source={avatarUrl} style={styles.avatar} contentFit="cover" transition={200}/>
             <TouchableOpacity onPress={changeAvatar}  style={styles.changeAvatarButt}>
               <Ionicons size={20} name="camera-reverse-outline" color={"white"} />
             </TouchableOpacity>
@@ -87,7 +135,7 @@ export default function Profile(){
           
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}> {currentUser.posts} </Text>
+              <Text style={styles.statNumber}> {currentUser.postsCount ?? 0} </Text>
               <Text style={styles.statLabel}>  Posts </Text>
             </View>
             <View style={styles.statItem}>
@@ -122,7 +170,7 @@ export default function Profile(){
       renderItem={({ item }) => (
         <TouchableOpacity style={styles.gridItem} onPress={() => setSelectedPost(item)}>
           <Image 
-          source={{ uri: item.imageUrl }} 
+          source={{ uri:API_BASE + item.imageUrl }} 
           style={styles.gridImage}
           contentFit="cover"
           transition={200}
@@ -135,10 +183,13 @@ export default function Profile(){
     </ScrollView>
       {/*modal bio update*/}
       <Modal
-      visible={isEditModalVisible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setIsEditModalVisible(false)}
+        isVisible={isEditModalVisible}
+        onBackdropPress={() => setIsEditModalVisible(false)} // tap outside to close
+        onBackButtonPress={() => setIsEditModalVisible(false)} // Android back button
+        animationIn="slideInUp"
+        animationOut="slideOutDown"
+        backdropOpacity={0.5}
+        style={{ margin: 0 }} // Fullscreen modal
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <KeyboardAvoidingView behavior={Platform.OS === "android" || Platform.OS === "ios"?"padding":"height"}  style={styles.modalContainer}>
@@ -180,10 +231,14 @@ export default function Profile(){
       </Modal>
       {/*modal image post*/}
     <Modal
-      visible={!!selectedPost}
-      animationType="fade"
-      transparent={true}
-      onRequestClose={() => setSelectedPost(null)}>
+      isVisible={!!selectedPost}
+      animationIn="slideInUp"
+      animationOut="slideOutDown"
+      backdropOpacity={0.5}
+      style={{ margin: 0 }}
+      onBackdropPress={() => setSelectedPost(null)}
+      onBackButtonPress={() => setSelectedPost(null)} 
+    >
         <View style={styles.modalBackdrop}>
           {selectedPost && (
             <View style={styles.postDetailContainer}>
@@ -193,7 +248,7 @@ export default function Profile(){
                 </TouchableOpacity>
               </View>
 
-              <Image source={selectedPost.imageUrl}
+              <Image source={API_BASE + selectedPost.imageUrl}
                 cachePolicy={"memory-disk"}
                 style={styles.postDetailImage}
               />

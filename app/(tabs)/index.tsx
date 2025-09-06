@@ -1,82 +1,88 @@
-import { useAuth } from '@clerk/clerk-expo';
-import { Link, Stack } from 'expo-router';
-import { StyleSheet, Image, Pressable, TouchableOpacity, Text, View, FlatList } from 'react-native';
-import styles from "@/styles/feed.styles"; 
+import { useEffect, useState } from 'react';
+import { StyleSheet, FlatList, TouchableOpacity, Text, View, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ScrollView } from "react-native";
-import { STORIES } from '@/constraints/mock-data';
-import Story, { StoryType } from '../components/story';
-import { useQuery } from 'convex/react';
-import { api } from '@/convex/_generated/api';
+import styles from "@/styles/feed.styles";
 import Loader from '../components/loader';
 import Post from '../components/post';
-import { Id } from '@/convex/_generated/dataModel';
+import { API_BASE } from '@/constants/api_base';
+import { useRouter } from 'expo-router';
+import { getFeedPost } from '@/convex/posts';
+import { deleteItem } from '../utils/Storage';
+import { useAuth } from '@/providers/AuthProvider';
 
 export default function Index() {
-  const { signOut } = useAuth();
+  const [posts, setPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const posts = useQuery(api.posts.getFeedPost);
-  
-  if (posts === undefined)  return <Loader />;
-  if (posts.length === 0) return <NoPostsFound />;
+  const router = useRouter();
+  const { isSignedIn, isLoaded, token, logout } = useAuth();
+
+  useEffect(() => {
+    const runFeedPost = async () => {
+      if (!isSignedIn) {
+        router.replace("/login");
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const data = await getFeedPost(); // use token from context
+        console.log("Fetched posts:", data);
+        setPosts(data);
+      } catch (error: any) {
+        const message = error?.response?.data?.message || error?.message || "";
+        console.error("Fetch error:", message);
+
+        if (message.includes("403") || message.includes("No access token")) {
+          await logout(); // centralized logout
+          router.replace("/login");
+        } else {
+          alert("Failed to load posts.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isLoaded) {
+      runFeedPost();
+    }
+  }, [isLoaded, isSignedIn]);
+
+  if (!isLoaded || loading) {
+    return (
+      <View className="flex-1 justify-center items-center">
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  /* if (loading) return <Loader />; */
 
   return (
     <View style={styles.container}>
-      <View  style={styles.header}>
-        <Text style={styles.headerTitle}> spotlight </Text>
-        <TouchableOpacity onPress={() => signOut()}>  
-          <Ionicons size={24} name="log-out-outline" color={"green"} />  
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>spotlight</Text>
+        <TouchableOpacity onPress={logout}>
+          <Ionicons size={24} name="log-out-outline" color="green" />
         </TouchableOpacity>
-
       </View>
-      {/*
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flexGrow: 1 ,flexDirection: "column"}}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storiesContainer}>
-          {STORIES.map((story : StoryType) => ( 
-            <Story key={story.id} story={story} />
-          ))}
-
-        </ScrollView>
-        
-        {posts.map((post) => (
-          <Post key={post._id} post={post} />
-        ))}
-
-      </ScrollView>
-      */}
-      <FlatList
+      {posts.length === 0 ? <NoPostsFound />
+      :  <FlatList
         data={posts}
-        keyExtractor={(item) => item._id}
-        ListHeaderComponent={() => (
-          <StoriesSection />
-        )}
+        keyExtractor={(item) => item._id?.toString() || item.id?.toString()}
+       /*  ListHeaderComponent={() => <StoriesSection />} */
         renderItem={({ item }) => <Post post={item} />}
         showsVerticalScrollIndicator={false}
       />
+    }
+      
     </View>
   );
 }
 
-const StoriesSection = () => {
-  return (
-    <FlatList
-            data={STORIES}
-            horizontal
-            keyExtractor={(item) => item.id}
-            showsHorizontalScrollIndicator={false}
-            style={styles.storiesContainer}
-            renderItem={({ item }) => <Story story={item} />}
-          />
-  );
-}
-
-const NoPostsFound = () => {
-  return <View style={{
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor:"black"
-  }}>
-    <Text style={{color:"white"}}>No posts found</Text>
+const NoPostsFound = () => (
+  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'black' }}>
+    <Text style={{ color: 'white' }}>No posts found</Text>
   </View>
-};
+);

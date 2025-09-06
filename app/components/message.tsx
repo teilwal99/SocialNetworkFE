@@ -32,11 +32,11 @@ export default function Message({ message,currentUsername }: MessageProps) {
         >
             <Image source={{ uri: message.sender.image }} style={styles.avatarMessage} />
             <View style={{ flex: 1, marginHorizontal: 10 }}>
-            <Text style={styles.messageUsername}>{message.sender.username}</Text>
-            <Text style={styles.messageText}>{message.content}</Text>
-            <Text style={styles.messageTime}>
-                {formatDistanceToNow(message._creationTime, { addSuffix: true })}
-            </Text>
+                <Text style={styles.messageUsername}>{message.sender.username}</Text>
+                <Text style={styles.messageText}>{message.content}</Text>
+                <Text style={styles.messageTime}>
+                    {formatDistanceToNow(message._creationTime, { addSuffix: true })}
+                </Text>
             </View>
         </View>
     );

@@ -13,7 +13,7 @@ export default function Notifications(){
   
   if(!notifications) return <Loader />
   if(notifications.length === 0) return <NoNotificationsFound />
-  console.log("notifications",notifications);
+  
   return (
     <View style={styles.container}>
     <View style={styles.header}>

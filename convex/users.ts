@@ -1,145 +1,122 @@
-import { Id } from "./_generated/dataModel";
-import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { getItem } from "../app/utils/Storage";
+import {API_BASE} from "../constants/api_base";
+import { getAccessToken } from "./posts";
 
-export const createUser = mutation({
-    args: {
-        username: v.string(),
-        fullname: v.string(),
-        email: v.string(),
-        bio: v.optional(v.string()),
-        image: v.string(),
-        clerkId: v.string(),
+// Helper: GET with Bearer token
+export const fetchWithAuth = async (url: string, token:string) => {
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
     },
-    handler: async (ctx, args) => {
-        console.log("Searching for user with email:", args.email);
-
-        const existingUser = await ctx.db
-            .query("users")
-            .withIndex("by_email", (q) => q.eq("email", args.email))
-            .first();
-
-        
-        if (existingUser) return;
-
-        await ctx.db.insert("users", {
-            username: args.username,
-            fullname: args.fullname,
-            email: args.email,
-            bio: args.bio,
-            image: args.image,
-            clerkId: args.clerkId,
-            followers: 0, 
-            following: 0, 
-            posts: 0, 
-        });
-    },
-});
-
-export async function getCurrentUser(ctx: QueryCtx) {
-    const userIdentity = await ctx.auth.getUserIdentity();
-    if (!userIdentity) {
-        throw new Error("Unauthorized");
-    }
-    
-    const user = await ctx.db
-        .query("users")
-        .withIndex("by_clerk_id", (q) => q.eq("clerkId", userIdentity.subject)) // ✅ Use Clerk ID
-        .first();
-
-    if (!user) {
-        throw new Error("User not found in database.");
-    }
-
-    return user;
+  });
+  if (!res.ok) throw new Error(`Error: ${res.status}`);
+  return await res.json();
 };
 
-export const getUserByClerkId= query({
-    args:{clerkId:v.string()},
-    handler: async (ctx,args) => {
-        const user = await ctx.db.query("users").withIndex("by_clerk_id",(q) => q.eq("clerkId", args.clerkId)).unique();
-
-        return user;
-    }
-});
-
-export const updateProfile = mutation({
-    args:{
-        fullname:v.string(),
-        bio:v.optional(v.string()),
+// Get current user
+export const getCurrentUser = async () => {
+  const token = await getAccessToken();
+  return fetchWithAuth(`${API_BASE}/users/me`, token);
+};
+// fetch user with auth by ID
+export const getUserById = async (userId: string | string[]) => {
+  const token = await getAccessToken();
+  return fetchWithAuth(`${API_BASE}/users/${userId}`, token);
+};
+// Register a new user
+export const createUser = async (userData: {
+  name: string;
+  email: string;
+  providerId: string;
+  avatarUrl?: string;
+}) => {
+  const res = await fetch(`${API_BASE}/user`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
     },
-    handler: async (ctx,args) => {
-        const user = await getCurrentUser(ctx);
+    body: JSON.stringify(userData),
+  });
+  if (!res.ok) throw new Error('Failed to create user');
+  return res.json();
+};
 
-        await ctx.db.patch(user._id,{fullname:args.fullname,bio:args.bio})
-    }
-})
-
-export const getUserProfile = query({
-    args:{userId:v.id("users")},    
-    handler: async (ctx,args) => {
-        const user = await ctx.db.get(args.userId);
-        if(!user){
-            throw new Error("User not found");
-        }
-
-        return user;
-    }
-})
-
-export const isFollowing = query({
-    args:{followingId:v.id("users")},
-    handler: async (ctx,args) => {
-        const user = await getCurrentUser(ctx);
-
-        const follow = await ctx.db.query("follows").withIndex("by_both",(q) => q.eq("followerId",user._id).eq("followingId",args.followingId)).first();
-
-        return !!follow;
-    }
-});
-
-export const followUser = mutation({
-    args:{followingId:v.id("users")},   
-    handler: async (ctx,args) => {
-        const user = await getCurrentUser(ctx);
-        const exising = await ctx.db.query("follows").withIndex("by_both",(q) => q.eq("followerId",user._id).eq("followingId",args.followingId)).first();
-
-        if(exising){
-            //unfollow
-            await ctx.db.delete(exising._id);
-            await updateFollowerCount(ctx,user._id,args.followingId,-1);
-        }
-        else{
-            //follow
-            await ctx.db.insert("follows",{followerId:user._id,followingId:args.followingId});
-            await updateFollowerCount(ctx,user._id,args.followingId, 1);
-        }
-
-        // create notification
-        await ctx.db.insert("notifications",{receiverId:args.followingId,senderId:user._id,type:"follow"});
-    }
-});
-
-const updateFollowerCount = async (ctx:MutationCtx,followerId:Id<"users">,followingId:Id<"users">,isFollow:number) => {
-    const follower = await ctx.db.get(followerId);
-    const following = await ctx.db.get(followingId);
-
-    if(follower && following) {
-        await ctx.db.patch(followerId,{following: follower.following + isFollow});
-        await ctx.db.patch(followingId,{followers: following.followers + isFollow});
-    }
-}
-
-export const updateAvatar = mutation({
-    args:{
-        userId: v.id("users"),
-        newAvatar: v.string()
+// Update user profile
+export const updateUser = async (id: number,
+  data: {
+    fullname?: string;
+    bio?: string;
+  }
+) => {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}/users/${id}/profile`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
     },
-    handler: async (ctx,args) => {
-        const user = await ctx.db.get(args.userId);
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update user');
+  return res.json();
+};
 
-        if(!user) throw new Error("user not login");
+// Update user avatar
+export const updateAvatar = async (avatarUrl: string,userId: number) => {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}/users/${userId}/avatar`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({image: avatarUrl }),
+  });
+  if (!res.ok) throw new Error('Failed to update avatar');
+  return;
+};
 
-        await ctx.db.patch(args.userId,{image: args.newAvatar});
-    }
-});
+// Toggle follow
+export const toggleFollow = async (requesterId: number|undefined, targetId: number) => {
+  const token = await getAccessToken();
+
+  const res = await fetch(`${API_BASE}/follows`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ requesterId, targetId }), // match the DTO
+  });
+
+  if (!res.ok) throw new Error('Failed to toggle follow');
+
+  const data = await res.json();
+  return data.isFollowing;
+};
+
+// Get follow status
+export const checkFollowStatus = async (targetId: number) => {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}/follows/status/${targetId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) throw new Error('Failed to check status');
+  const data = await res.json();
+  return data.isFollowing;
+};
+
+// Get followers of a user
+export const getFollowersMessagers = async (userId: number) => {
+  const token = await getAccessToken();
+  return await fetchWithAuth(`${API_BASE}/messages/followers/${userId}`, token);
+};
+
+// Get following users
+export const getFollowing = async (userId: string) => {
+  const res = await fetch(`${API_BASE}/follows/following/${userId}`);
+  if (!res.ok) throw new Error('Failed to get following');
+  return res.json();
+};

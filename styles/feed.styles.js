@@ -84,8 +84,8 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   postImage: {
-    width: width,
-    height: width,
+    width: width - 16,
+    marginHorizontal: 8,
   },
   postActions: {
     flexDirection: "row",
