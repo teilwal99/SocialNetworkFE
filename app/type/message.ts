@@ -1,13 +1,18 @@
 import { User } from "./user";
 
-export interface Message {
+export interface MessageProps {
   id: number;
-  sender: number;
-  receiver: number;
   content: string;
   timestamp: string; // ISO date string
+  sender: Profile;
+  receiver: Profile;
+  
 }
-
+export interface MessageCreateProps {
+  senderId: number;
+  receiverId: number;
+  content: string;
+}
 export interface Conversation {
   participants: Profile[];
 

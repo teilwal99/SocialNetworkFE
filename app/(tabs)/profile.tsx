@@ -2,10 +2,10 @@ import { FlatList, Keyboard, KeyboardAvoidingView,  Platform, Pressable, ScrollV
 import { Image } from "expo-image";
 import Loader from "../components/loader";
 import {styles} from "@/styles/profile.styles";
-import { updateAvatar, updateUser } from "@/convex/users";
+import { updateAvatar, updateUser } from "@/apis/users";
 import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { getPostsByUser, uploadMedia } from "@/convex/posts";
+import { getPostsByUser, uploadMedia } from "@/apis/posts";
 import { User } from "../type/user";
 import * as ImagePicker from "expo-image-picker";
 import { set } from "date-fns";

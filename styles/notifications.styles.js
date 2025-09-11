@@ -27,6 +27,10 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 20,
+    padding: 8,
+    borderWidth: 0.5,
+    borderColor: Colors.white ,
+    color: Colors.white,
   },
   notificationContent: {
     flex: 1,
@@ -68,7 +72,7 @@ export const styles = StyleSheet.create({
     marginBottom: 2,
   },
   action: {
-    color: Colors.gray,
+    color: Colors.white,
     fontSize: 14,
     marginBottom: 2,
   },

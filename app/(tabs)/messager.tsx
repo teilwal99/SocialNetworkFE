@@ -1,4 +1,3 @@
-// app/messages/MessagePage.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -8,67 +7,77 @@ import {
   TouchableOpacity,
   StyleSheet,Image
 } from 'react-native';
-import { Message, Conversation } from '../type/message';
+import { MessageProps, Conversation, Profile } from '../type/message';
 import { useRouter } from 'expo-router';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, set } from 'date-fns';
 import styles from '@/styles/feed.styles';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/providers/AuthProvider';
 import { STORIES } from '@/constraints/mock-data';
 import Story from '../components/story';
-import { getFollowersMessagers } from '@/convex/users';
+import { getFollowersMessagers } from '@/apis/users';
+import Message from '../components/message';
+import MessageModal from '../components/messageModal';
+import { fetchConversationsByUser } from '@/apis/messages';
 
 
 
 export default function Messager() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [followersMessages, setFollwersMessages] = useState<any[]>([])
+  const [convasationMessages, setConvasationMessages] = useState<Conversation[]>([]);
+  const [ MessagesModalisVisible, setMessagesModalIsVisible ] = useState(false);
+  const [ receiver, setReceiver ] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const {user} = useAuth();
+  const [sender, setSender] = useState<Profile | null>(null);
+
   const StoriesSection = () => (
     <FlatList
-      data={followersMessages}
+      data={convasationMessages}
       horizontal
       keyExtractor={(item) => item.id ? item.id.toString():""}
       showsHorizontalScrollIndicator={false}
       style={styles.storiesContainer}
-      renderItem={({ item }) => <Story story={item} />}
+      renderItem={({ item }) => <Story cons={item} />}
     />
   );
   // Always run all hooks — don't return early above
   useEffect(() => {
+    if (!user?.id) return;
+    if (user) {
+        setSender({
+          id: user.id,
+          fullname: user.fullname ?? "",
+          username: user.username,
+          profilePictureUrl: user.profilePictureUrl,
+        });
+    }
     const fetchConversations = async () => {
-      if (!user?.id) return;
-
+      
       try {
         setLoading(true);
 
-        const data = await getFollowersMessagers(user.id);
-        setFollwersMessages(data);
+        const data = await fetchConversationsByUser(user.id);
+        setConvasationMessages(data);
         // Transform data into Conversation[]
         const transformed: Conversation[] = data.map((item: any) => ({
-          id: item.conversationId ?? 0, // fallback if null
-          lastMessage: item.lastMessage ?? '',
-          lastMessageTimestamp: item.lastMessageTimestamp ?? new Date().toISOString(),
-          participants: [
-            {
-              id: item.followerId,
-              fullname: item.fullname,
-              username: item.username,
-              profilePictureUrl: item.profilePictureUrl,
-            },
-            {
-              id: user.id,
-              fullname: user.fullname,
-              username: user.username,
-              profilePictureUrl: user.profilePictureUrl,
-            },
-          ],
+          id: item.id ?? 0, // use backend `id`
+          lastMessage: item.lastMessageContent ?? null,
+          lastMessageTimestamp: item.lastMessageTimestamp ?? null,
+          unreadCount: item.unreadCount ?? 0, // fallback if missing
+          participants: item.participants?.map((p: any) => ({
+            id: p.id,
+            fullname: p.fullname,
+            username: p.username,
+            profilePictureUrl: p.profilePictureUrl ?? "/media/avatar/default-avatar.png",
+          })) ?? [],
         }));
-        console.log("transform", transformed)
+
+        console.log("transform", transformed);
         setConversations(transformed);
+        
       } catch (err) {
         console.error("Failed to fetch conversations", err);
       } finally {
@@ -82,6 +91,7 @@ export default function Messager() {
 
   if (loading) return <Text>Loading...</Text>;
   if (!user) return <Text>User not found.</Text>;
+  
 
   if (conversations.length === 0)
     return <Text style={{ padding: 20 }}>No conversations yet.</Text>;
@@ -95,6 +105,7 @@ export default function Messager() {
         <Text style={styles.headerTitle}> Messager </Text>
         <View style={{ width: 28 }}></View>
       </View>
+      
       <FlatList
         data={conversations}
         keyExtractor={(item) => item.id? item.id.toString() : ""}
@@ -105,7 +116,8 @@ export default function Messager() {
           return (
             <TouchableOpacity
               onPress={() => {
-                // router.push(`/chat/${otherParticipant?.id}`);
+                setMessagesModalIsVisible(true);
+                setReceiver(otherParticipant || null);
               }}
               style={{
                 flexDirection: 'row',
@@ -118,7 +130,7 @@ export default function Messager() {
               }}
             >
               <Image
-                source={{ uri: otherParticipant?.profilePictureUrl || 'http://localhost:8081/media/avatar/default-avatar.png' }}
+                source={{ uri: "http://localhost:8081" + otherParticipant?.profilePictureUrl  }}
                 style={{
                   width: 50,
                   height: 50,
@@ -147,7 +159,7 @@ export default function Messager() {
                     fontSize: 14,
                   }}
                 >
-                  {item.lastMessage ? `“${item.lastMessage}”` : 'No messages yet'}
+                  {item.lastMessage ? `“${item.lastMessage}”` : 'No convasationMessages yet'}
                 </Text>
               </View>
 
@@ -166,6 +178,14 @@ export default function Messager() {
           );
         }}
       />
+      <MessageModal 
+        visible={MessagesModalisVisible} 
+        onClose={() => setMessagesModalIsVisible(false)} 
+        sender={sender}
+        receiver={receiver}
+        setConversations={setConversations}
+      />  
+      
   </View>
   );
 }

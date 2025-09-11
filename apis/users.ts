@@ -1,27 +1,19 @@
 import { getItem } from "../app/utils/Storage";
 import {API_BASE} from "../constants/api_base";
-import { getAccessToken } from "./posts";
+import { fetchWithAuth } from "./headerAuth";
+import {getAccessToken } from "./posts";
 
 // Helper: GET with Bearer token
-export const fetchWithAuth = async (url: string, token:string) => {
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!res.ok) throw new Error(`Error: ${res.status}`);
-  return await res.json();
-};
 
 // Get current user
 export const getCurrentUser = async () => {
   const token = await getAccessToken();
-  return fetchWithAuth(`${API_BASE}/users/me`, token);
+  return fetchWithAuth(`${API_BASE}/users/me`);
 };
 // fetch user with auth by ID
 export const getUserById = async (userId: string | string[]) => {
   const token = await getAccessToken();
-  return fetchWithAuth(`${API_BASE}/users/${userId}`, token);
+  return fetchWithAuth(`${API_BASE}/users/${userId}`);
 };
 // Register a new user
 export const createUser = async (userData: {
@@ -111,7 +103,7 @@ export const checkFollowStatus = async (targetId: number) => {
 // Get followers of a user
 export const getFollowersMessagers = async (userId: number) => {
   const token = await getAccessToken();
-  return await fetchWithAuth(`${API_BASE}/messages/followers/${userId}`, token);
+  return await fetchWithAuth(`${API_BASE}/messages/followers/${userId}`);
 };
 
 // Get following users

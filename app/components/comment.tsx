@@ -23,7 +23,7 @@ interface Comment {
 export default function Comment({ comment }: { comment: Comment }) {
   return (
     <View style={styles.commentContainer}>
-      <Image source={{ uri: comment.user.image }} style={styles.commentAvatar} />
+      <Image source={{ uri: comment.user.image ? API_BASE + comment.user.image : API_BASE + "/media/avatar/default-avatar.png" }} style={styles.commentAvatar} />
       <View style={{ flex: 1, flexDirection: "column" }}>
         <Text style={styles.commentUsername}>{comment.user.fullname}</Text>
         <Text style={styles.commentText}>{comment.content}</Text>

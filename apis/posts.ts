@@ -1,5 +1,7 @@
 import { API_BASE } from "../constants/api_base";
 import { getItem } from "../app/utils/Storage";
+import { fetchWithAuth } from "./headerAuth";
+import { sendNotification, sendNotificationWS } from "./notifications";
 
 export const getAccessToken = async () => {
   const token = await getItem("access_token");
@@ -7,34 +9,6 @@ export const getAccessToken = async () => {
     throw new Error("No access token found");
   }
   return token;
-};
-// Helper: GET with auth token
-export const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-  const token = await getItem("access_token");
-  console.log("Using token:", token);
-  if (!token) {
-    throw new Error("No access token found");
-  }
-
-  const res = await fetch(`${url}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (res.status === 403) {
-    console.error("Access denied: 403");
-  }
-
-  if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`API error ${res.status}: ${errorBody}`);
-  }
-
-  return res.json();
 };
 
 // Get user from token
@@ -75,7 +49,7 @@ export const getFeedPost = async () => {
 };
 
 // Like or unlike a post
-export const likePost = async (postId: number, userId: number, reactionType: string = "like") => {
+export const likePost = async (postId: number,postOwnerId: number, userId: number, reactionType: string = "like") => {
   const token = await getAccessToken();
 
   const res = await fetch(`${API_BASE}/reactions`, {
@@ -93,6 +67,15 @@ export const likePost = async (postId: number, userId: number, reactionType: str
 
   if (!res.ok) return null;
   
+  //create notification for post like
+  if(reactionType === "like"){
+    await sendNotification({
+      type: "like",
+      data: "liked your post",
+      receiverId: postOwnerId, // owner of the post
+      senderId: userId,
+    });
+  }
   return res.json(); // returns the saved or updated Reaction object
 };
 

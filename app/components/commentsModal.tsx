@@ -19,7 +19,7 @@ import Loader from "./loader";
 import Comment from "./comment";
 import styles from "@/styles/feed.styles";
 import { API_BASE } from "@/constants/api_base";
-import { createComment, getComments } from "@/convex/comments";
+import { createComment, getComments } from "@/apis/comments";
 import { useAuth } from "@/providers/AuthProvider";
 
 type CommentsModal = {

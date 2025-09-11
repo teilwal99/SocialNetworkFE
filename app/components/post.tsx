@@ -7,8 +7,8 @@ import React, { useState, useEffect } from "react";
 import * as FileSystem from "expo-file-system";
 import { useMutation, useQuery } from "convex/react";
 import CommentsModal from "./commentsModal";
-import { bookmarkPost } from "@/convex/bookmarks";
-import { likePost, deletePost, getReaction } from "@/convex/posts";
+import { bookmarkPost } from "@/apis/bookmarks";
+import { likePost, deletePost, getReaction } from "@/apis/posts";
 import { User } from "../type/user";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -94,7 +94,7 @@ export default function Post({ post }: PostProps) {
     try {
       if (!user) return;
 
-      const updated = await likePost(post.id, user.id, type);
+      const updated = await likePost(post.id,post.author._id, user.id, type);
       console.log(updated);
       // Case: reaction was removed (same type clicked again)
       if (updated.status) {

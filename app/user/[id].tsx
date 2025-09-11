@@ -7,21 +7,20 @@ import { Image } from "expo-image";
 import { FlatList } from "react-native";
 import { useEffect, useId, useState } from "react";
 import MessageModal from "../components/messageModal";
-import { checkFollowStatus, getUserById, toggleFollow } from "@/convex/users";
-import { getPostsByUser } from "@/convex/posts";
+import { checkFollowStatus, getUserById, toggleFollow } from "@/apis/users";
+import { getPostsByUser } from "@/apis/posts";
 import profile from "../(tabs)/profile";
 import { User } from "../type/user";
 import { set } from "date-fns";
 import { useAuth } from "@/providers/AuthProvider";
+import { Profile } from "../type/message";
 const BASE_URL = "http://localhost:8081"; // Adjust this to your API base URL
 export default function UserProfile() {
     const [guestUser, setGuestUser] = useState<User | null>(null);
     const {user , logout} = useAuth();
+    const [userProfile, setUserProfile] = useState<Profile | null>(null);
     const [guestFollowers, setGuestFollowers] = useState<number>(0);
-    const [guestProfile, setGuestProfile] = useState({
-        fullname: "",
-        bio: "",
-    });
+    const [guestProfile, setGuestProfile] = useState<Profile | null>(null);
     const [posts, setPosts] = useState<any[]>([]);
     const {id} = useLocalSearchParams();
     const [isMessageModalVisible, setIsMessageModalVisible] = useState(false);
@@ -41,10 +40,20 @@ export default function UserProfile() {
                 }
                 setGuestUser(guest);
                 setGuestFollowers(guest.followers);
-                setGuestProfile({  
-                    fullname: guestUser?.fullname || "",
-                    bio: guestUser?.bio || "",
+                setGuestProfile({
+                    id: guest.id,
+                    fullname: guest.fullname ?? "",
+                    username: guest.username,
+                    profilePictureUrl: guest.profilePictureUrl ?? `/media/avatar/default-avatar.png`,
                 });
+                if(user) {
+                    setUserProfile({
+                        id: user.id,
+                        fullname: user.fullname ?? "",
+                        username: user.username,
+                        profilePictureUrl: user.profilePictureUrl ?? `/media/avatar/default-avatar.png`,
+                    });
+                }
             } catch (err) {
                 console.error('Failed to fetch user:', err);
             }
@@ -165,8 +174,9 @@ export default function UserProfile() {
                         <MessageModal
                             visible={isMessageModalVisible}
                             onClose={() => setIsMessageModalVisible(false)}
-                            senderId={String(user.id)}
-                            receiverId={String(guestUser.id)}
+                            sender={userProfile}
+                            receiver={guestProfile}
+                            setConversations={() => {}}
                         />
                         )}
                     </View>

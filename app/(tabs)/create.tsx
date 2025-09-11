@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/Colors";
 import { Image } from "expo-image";
 import styles from "@/styles/auth.styles"; 
-import { createPost, uploadMedia } from "@/convex/posts";
+import { createPost, uploadMedia } from "@/apis/posts";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function Create() {

@@ -6,7 +6,7 @@ import Loader from '../components/loader';
 import Post from '../components/post';
 import { API_BASE } from '@/constants/api_base';
 import { useRouter } from 'expo-router';
-import { getFeedPost } from '@/convex/posts';
+import { getFeedPost } from '@/apis/posts';
 import { deleteItem } from '../utils/Storage';
 import { useAuth } from '@/providers/AuthProvider';
 

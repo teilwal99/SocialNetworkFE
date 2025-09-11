@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 import jwtDecode from "jwt-decode";
 import { deleteItem, getItem, saveItem } from "@/app/utils/Storage";
-import { getCurrentUser } from "@/convex/users";
+import { getCurrentUser } from "@/apis/users";
 import { User } from "@/app/type/user";
 
 interface AuthContextType {
